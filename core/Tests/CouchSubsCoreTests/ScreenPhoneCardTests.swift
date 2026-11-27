@@ -325,9 +325,9 @@ final class ScreenPhoneCardTests: XCTestCase {
                      message("Where are you", "Neredesin", role: .incoming, top: 0.30, height: 0.02, style: cream),
                      message("On my way", "Yoldayım", role: .outgoing, top: 0.42, height: 0.02, style: blue),
                      // Uzun Türkçe: altındaki balonun İngilizcesiyle çakışır, o balon aşağı itilir.
-                     message("Bring the stuff", String(repeating: "Malzemeleri getir hemen ", count: 6), role: .incoming,
-                             top: 0.50, height: 0.02, style: cream),
-                     message("Ok", "Tamam", role: .outgoing, top: 0.53, height: 0.02, style: nil)]
+                     message("Bring the stuff", String(repeating: "Malzemeleri getir hemen ", count: 3), role: .incoming,
+                             top: 0.52, height: 0.02, style: cream),
+                     message("Ok", "Tamam", role: .outgoing, top: 0.55, height: 0.02, style: nil)]
         let laid = ScreenPhoneCard.layout(items, handset: phone)
         XCTAssertEqual(laid, ScreenPhoneCard.layout(items, handset: phone), "aynı içerik birebir aynı çıktı")
         let panel = try! XCTUnwrap(ScreenPhoneCard.panel(laid))
@@ -337,7 +337,7 @@ final class ScreenPhoneCardTests: XCTestCase {
         let rows = panel.messages
         XCTAssertEqual(rows.map(\.translation).prefix(2), ["Neredesin", "Yoldayım"])
         // Üst kenar hizası: Türkçe balonun yazısı İngilizce yazının üstünde başlar (balon dolgusu kadar yukarıdan).
-        for (row, english) in zip(rows.prefix(3), [0.30, 0.42, 0.50]) {
+        for (row, english) in zip(rows.prefix(3), [0.30, 0.42, 0.52]) {
             XCTAssertEqual(row.box.top + line * ScreenPhoneCard.bubblePadding / 2, english, accuracy: 3 * pixel, row.translation)
         }
         // Çakışma: "Tamam" İngilizcesinin yüksekliğinde duramaz, uzun balonun hemen altına (en az kaydırmayla) itilir.

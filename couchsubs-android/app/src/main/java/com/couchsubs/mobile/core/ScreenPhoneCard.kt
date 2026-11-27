@@ -95,10 +95,11 @@ object ScreenPhoneCard {
     const val MIN_WIDTH = 0.12
     /**
      * Kartın istenen eni: telefonun bu katı, en az [CARD_MIN] (yanda yer varsa). Telefon boyundaki dar kartta Türkçe
-     * mesajlar çok satıra bölünüyor, balonlar iç içe görünüyordu.
+     * mesajlar çok satıra bölünüyor, balonlar iç içe görünüyordu. Yazı altyazı boyuna büyüyünce ([MIN_LINE]) kart da
+     * genişledi (1080p'de ~650 piksel): balonda satır başına ~22 harf düşer. Mac ile aynı.
      */
-    const val CARD_SCALE = 1.4
-    const val CARD_MIN = 0.22
+    const val CARD_SCALE = 1.7
+    const val CARD_MIN = 0.34
     /** Mesajlar telefon boyuna sığmazsa kart ekranın bu payına kadar yukarı ve aşağı uzar; yine sığmazsa eski mesajlar düşer. */
     const val SCREEN_MARGIN = 0.03
     /**
@@ -114,14 +115,17 @@ object ScreenPhoneCard {
     /** Balonun kart genişliğine oranı (en çok) ve en az. */
     const val BUBBLE_SHARE = 0.8
     const val BUBBLE_MIN = 0.3
-    /** Kartta yazı boyu (kare yüksekliğine oranla) en az bu: telefonun küçük yazısı TV'de okunsun (1080p'de ~24 nokta). */
-    const val MIN_LINE = 0.022
     /**
-     * Kartta yazı boyu en çok bu (altyazı boyutu çarpanıyla): telefon yazısıyla orantılı kalır. Sinan Bey (beta.100,
-     * 3416): gönderinin Türkçesi dev, her satıra bir sözcük düşen patlak balondu; ölçüm fotoğrafın içindeki büyük yazıyı
-     * (tabela) da alıyordu. 3417'deki küçük balon doğru boydur (1080p'de ~32 nokta satır).
+     * Kartta yazı boyu (kare yüksekliğine oranla, altyazı boyutu çarpanıyla) en az bu: panelin yazısı altyazı boyunun
+     * ~%85'i (TV'de 1080p'de ~39, 4K'da ~78 piksel). X (beta-106): telefonun yanındaki çeviri küçük, okunmuyordu; GTA 6'da
+     * satır hep eski alt sınırda (0,022: altyazının yarısı) kalıyordu. Mac ile aynı.
      */
-    const val MAX_LINE = 0.03
+    const val MIN_LINE = 0.038
+    /**
+     * Kartta yazı boyu en çok bu (altyazı boyutu çarpanıyla): ölçüm fotoğrafın içindeki büyük yazıyı (tabela) alırsa panel
+     * dev çizilmez (Sinan Bey, beta.100 3416).
+     */
+    const val MAX_LINE = 0.042
     /** Bir harfin ortalama genişliği, satır yüksekliğine oranla (TV'nin yazı tipinde Türkçe metinle ölçüldü, ~0,5). */
     const val CHAR_WIDTH = 0.5
 
@@ -314,7 +318,8 @@ object ScreenPhoneCard {
             val left = if (right) phone.right + GAP else phone.left - GAP - width
             return TextBox(left, phone.top, left + width, phone.bottom)
         }
-        // Önce daha geniş yan; öbür yan ancak başka çevirilerin üstüne daha az binerse seçilir.
+        // Önce daha geniş yan (telefon kenardaysa ekranın ortasına doğru); öbür yan ancak kart orada da daralmıyorsa ve başka
+        // çevirilerin üstüne daha az biniyorsa seçilir: kart ekranın kenarına sıkışıp daralmaz (X, beta-106). Mac ile aynı.
         val candidates = listOfNotNull(side(roomLeft < roomRight), side(roomLeft >= roomRight))
         if (candidates.isEmpty()) {
             // Yanda yer yoksa telefonun altında; orada da yer yoksa telefonun üstünde (Mac ile aynı).
@@ -326,7 +331,10 @@ object ScreenPhoneCard {
             return TextBox(maxOf(0.0, phone.left), phone.top, minOf(1.0, phone.right), phone.bottom)
         }
         var best = candidates.first()
-        for (candidate in candidates.drop(1)) if (covered(candidate, others) < covered(best, others) - 1e-9) best = candidate
+        for (candidate in candidates.drop(1)) {
+            if (candidate.right - candidate.left >= best.right - best.left - 1e-9 &&
+                covered(candidate, others) < covered(best, others) - 1e-9) best = candidate
+        }
         return best
     }
 
@@ -354,10 +362,28 @@ object ScreenPhoneCard {
         if (onPhone.none { !it.unchanged }) return items
         val others = items.filter { it.phone?.role?.inCard != true }
         val start = cardBox(handset.bounds, others.filter { !it.unchanged }.map { it.box })
-        val cardWidth = start.right - start.left
         val measured = lockedLine ?: measuredLine(onPhone) ?: 0.0
         val scale = minOf(MAX_SCALE, maxOf(MIN_SCALE, textScale))
-        val line = minOf(MAX_LINE * scale, maxOf(MIN_LINE * scale, measured))
+        var line = minOf(MAX_LINE * scale, maxOf(MIN_LINE * scale, measured))
+        // Sohbet dışı ekran (mesaj listesi, ana ekran, uygulama kartları) panele sığmazsa satırları düşmez: yazı
+        // [FIT_MIN_LINE]'a dek küçülür. Sohbette yazı boyu sabit kalır, en eski mesajlar düşer (Mac ile aynı).
+        val chat = onPhone.any { it.phone!!.role in setOf(Role.INCOMING, Role.OUTGOING, Role.MESSAGE, Role.OPTION) }
+        val least = FIT_MIN_LINE * scale
+        while (true) {
+            val (made, dropped) = arrange(items, onPhone, others, start, handset, line)
+            if (!dropped || chat || line <= least + 1e-12) return made
+            line = maxOf(least, line * 0.9)
+        }
+    }
+
+    /** Sohbet dışı ekranın panele sığmadığında yazısının küçülebileceği en küçük satır (eski alt sınır). Mac ile aynı. */
+    const val FIT_MIN_LINE = 0.022
+
+    /** [layout]'un verilen satır yüksekliğiyle dizilişi; ikincisi: panele sığmayan en eski satırlar düştü. */
+    private fun arrange(items: List<ScreenTranslation.Item>, onPhone: List<ScreenTranslation.Item>,
+                        others: List<ScreenTranslation.Item>, start: TextBox, handset: Handset,
+                        line: Double): Pair<List<ScreenTranslation.Item>, Boolean> {
+        val cardWidth = start.right - start.left
         val pad = cardWidth * 0.05
         val padY = line * 0.4
         val spacing = line * BUBBLE_SPACING
@@ -430,7 +456,7 @@ object ScreenPhoneCard {
                 look = flat(side, kind == Role.HEADING), panel = part)
             rows.add(Row(placed, width, lines.size * line * LINE_SPACING + line * BUBBLE_PADDING, side))
         }
-        if (rows.isEmpty()) return items
+        if (rows.isEmpty()) return items to false
         val limit = 1 - SCREEN_MARGIN
         val bodyTop = SCREEN_MARGIN
         // Her balon kendi İngilizce balonunun yüksekliğinde; çakışan balon üsttekinin altına en az kaydırmayla itilir. Panel
@@ -449,8 +475,10 @@ object ScreenPhoneCard {
             return tops
         }
         var tops = alignedTops()
+        var dropped = false
         while (rows.size > 1 && tops[0] < bodyTop - 1e-9) {
             rows.removeAt(0)
+            dropped = true
             tops = alignedTops()
         }
         if (tops.isNotEmpty() && tops[0] < bodyTop) tops[0] = bodyTop
@@ -481,7 +509,7 @@ object ScreenPhoneCard {
             }
             result.add(row.item.copy(box = TextBox(left, tops[index], left + row.width, tops[index] + row.height)))
         }
-        return result
+        return result to dropped
     }
 
     /** Sohbet dışı ekranın kartı mı (ana ekranın yazısı da). */

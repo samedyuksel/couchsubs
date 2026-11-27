@@ -261,8 +261,8 @@ public class ScreenPhoneCardTests
             Message("Where are you", "Neredesin", ScreenPhoneCard.Role.Incoming, 0.30, cream),
             Message("On my way", "Yoldayım", ScreenPhoneCard.Role.Outgoing, 0.42, blue),
             // Uzun Türkçe: altındaki balonun İngilizcesiyle çakışır, o balon aşağı itilir.
-            Message("Bring the stuff", string.Concat(Enumerable.Repeat("Malzemeleri getir hemen ", 6)), ScreenPhoneCard.Role.Incoming, 0.50, cream),
-            Message("Ok", "Tamam", ScreenPhoneCard.Role.Outgoing, 0.53, null),
+            Message("Bring the stuff", string.Concat(Enumerable.Repeat("Malzemeleri getir hemen ", 3)), ScreenPhoneCard.Role.Incoming, 0.52, cream),
+            Message("Ok", "Tamam", ScreenPhoneCard.Role.Outgoing, 0.55, null),
         ];
         var laid = ScreenPhoneCard.Layout(items, phone);
         Assert.Equal(laid, ScreenPhoneCard.Layout(items, phone));
@@ -270,7 +270,7 @@ public class ScreenPhoneCardTests
         Assert.True(panel.Aligned);
         double line = panel.Card.LineHeight, pixel = 1.0 / 1080;
         var rows = panel.Messages;
-        double[] english = [0.30, 0.42, 0.50];
+        double[] english = [0.30, 0.42, 0.52];
         for (var i = 0; i < 3; i++)
             Assert.True(Math.Abs(rows[i].Box.Top + line * ScreenPhoneCard.BubblePadding / 2 - english[i]) <= 3 * pixel, rows[i].Translation);
         Assert.True(rows[3].Box.Top > ScreenPhoneCard.AlignedTop(items[4], line));

@@ -25,10 +25,10 @@ class PhoneListCardTest {
 
     private fun list() = listOf(
         item("Messages", "Mesajlar", ScreenPhoneCard.Role.HEADING, 0.05, left = 0.05, right = 0.3),
-        item("Joey", "Joey", ScreenPhoneCard.Role.CONTACT, 0.15, unchanged = true, right = 0.4),
-        item("Hey this is Joey from Coa...", "Selam, ben Joey...", ScreenPhoneCard.Role.PREVIEW, 0.19),
-        item("Shirley", "Shirley", ScreenPhoneCard.Role.CONTACT, 0.35, unchanged = true, right = 0.45),
-        item("Oh that's nice hon.", "Ah, ne güzel tatlım.", ScreenPhoneCard.Role.PREVIEW, 0.39),
+        item("Joey", "Joey", ScreenPhoneCard.Role.CONTACT, 0.22, unchanged = true, right = 0.4),
+        item("Hey this is Joey from Coa...", "Selam, ben Joey...", ScreenPhoneCard.Role.PREVIEW, 0.26),
+        item("Shirley", "Shirley", ScreenPhoneCard.Role.CONTACT, 0.48, unchanged = true, right = 0.45),
+        item("Oh that's nice hon.", "Ah, ne güzel tatlım.", ScreenPhoneCard.Role.PREVIEW, 0.52),
     )
 
     /** Ad ve önizleme tek kart; kartın üstü adın İngilizcesiyle aynı hizada; bölüm başlığı küçük başlık (not). */
