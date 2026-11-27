@@ -287,8 +287,8 @@ class ScreenPhoneCardTest {
             message("Where are you", "Neredesin", ScreenPhoneCard.Role.INCOMING, 0.30, cream),
             message("On my way", "Yoldayım", ScreenPhoneCard.Role.OUTGOING, 0.42, blue),
             // Uzun Türkçe: altındaki balonun İngilizcesiyle çakışır, o balon aşağı itilir.
-            message("Bring the stuff", "Malzemeleri getir hemen ".repeat(6), ScreenPhoneCard.Role.INCOMING, 0.50, cream),
-            message("Ok", "Tamam", ScreenPhoneCard.Role.OUTGOING, 0.53, null))
+            message("Bring the stuff", "Malzemeleri getir hemen ".repeat(3), ScreenPhoneCard.Role.INCOMING, 0.52, cream),
+            message("Ok", "Tamam", ScreenPhoneCard.Role.OUTGOING, 0.55, null))
         val laid = ScreenPhoneCard.layout(items, phone)
         assertEquals(laid, ScreenPhoneCard.layout(items, phone))
         val panel = ScreenPhoneCard.panel(laid)!!
@@ -296,7 +296,7 @@ class ScreenPhoneCardTest {
         val line = panel.card.lineHeight
         val pixel = 1.0 / 1080
         val rows = panel.messages
-        listOf(0.30, 0.42, 0.50).forEachIndexed { i, english ->
+        listOf(0.30, 0.42, 0.52).forEachIndexed { i, english ->
             assertEquals(rows[i].translation, english, rows[i].box.top + line * ScreenPhoneCard.BUBBLE_PADDING / 2, 3 * pixel)
         }
         assertTrue(rows[3].box.top > ScreenPhoneCard.alignedTop(items[4], line))

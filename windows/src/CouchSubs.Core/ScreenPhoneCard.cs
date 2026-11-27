@@ -84,9 +84,10 @@ public static class ScreenPhoneCard
     internal const double MinWidth = 0.12, MinBelow = 0.18;
     /// <summary>
     /// Kartın istenen eni: telefonun bu katı, en az <see cref="CardMin"/> (yanda yer varsa). Telefon boyundaki dar kartta
-    /// Türkçe mesajlar çok satıra bölünüyor, balonlar iç içe görünüyordu.
+    /// Türkçe mesajlar çok satıra bölünüyor, balonlar iç içe görünüyordu. Yazı altyazı boyuna büyüyünce (<see cref="MinLine"/>)
+    /// kart da genişledi (1080p'de ~650 piksel): balonda satır başına ~22 harf düşer. Mac/iPhone ve Android ile aynı.
     /// </summary>
-    internal const double CardScale = 1.4, CardMin = 0.22;
+    internal const double CardScale = 1.7, CardMin = 0.34;
     /// <summary>Mesajlar telefon boyuna sığmazsa kart ekranın bu payına kadar yukarı ve aşağı uzar; yine sığmazsa eski mesajlar düşer.</summary>
     internal const double ScreenMargin = 0.03;
     /// <summary>
@@ -99,14 +100,17 @@ public static class ScreenPhoneCard
     internal const double ListGap = 0.1;
     /// <summary>Balonun kart genişliğine oranı (en çok) ve en az.</summary>
     internal const double BubbleShare = 0.8, BubbleMin = 0.3;
-    /// <summary>Kartta yazı boyu (kare yüksekliğine oranla) en az bu: telefonun küçük yazısı TV'de okunsun (1080p'de ~24 nokta).</summary>
-    internal const double MinLine = 0.022;
     /// <summary>
-    /// Kartta yazı boyu en çok bu (altyazı boyutu çarpanıyla): telefon yazısıyla orantılı kalır. Sinan Bey (beta.100, 3416):
-    /// gönderinin Türkçesi dev, her satıra bir sözcük düşen patlak balondu; ölçüm fotoğrafın içindeki büyük yazıyı (tabela)
-    /// da alıyordu. 3417'deki küçük balon doğru boydur (1080p'de ~32 nokta satır). Mac/iPhone ve Android ile aynı.
+    /// Kartta yazı boyu (kare yüksekliğine oranla, altyazı boyutu çarpanıyla) en az bu: panelin yazısı altyazı boyunun ~%85'i
+    /// (TV'de 1080p'de ~39, 4K'da ~78 piksel). X (beta-106): telefonun yanındaki çeviri küçük, okunmuyordu; GTA 6'da satır
+    /// hep eski alt sınırda (0,022: altyazının yarısı) kalıyordu. Mac/iPhone ve Android ile aynı.
     /// </summary>
-    internal const double MaxLine = 0.03;
+    internal const double MinLine = 0.038;
+    /// <summary>
+    /// Kartta yazı boyu en çok bu (altyazı boyutu çarpanıyla): ölçüm fotoğrafın içindeki büyük yazıyı (tabela) alırsa panel
+    /// dev çizilmez (Sinan Bey, beta.100 3416).
+    /// </summary>
+    internal const double MaxLine = 0.042;
     /// <summary>Bir harfin ortalama genişliği, satır yüksekliğine oranla (TV'nin yazı tipinde Türkçe metinle ölçüldü, ~0,5).</summary>
     internal const double CharWidth = 0.5;
 
@@ -317,7 +321,8 @@ public static class ScreenPhoneCard
             var left = right ? phone.Right + Gap : phone.Left - Gap - width;
             return new TextBox(left, phone.Top, left + width, phone.Bottom);
         }
-        // Önce daha geniş yan; öbür yan ancak başka çevirilerin üstüne daha az binerse seçilir.
+        // Önce daha geniş yan (telefon kenardaysa ekranın ortasına doğru); öbür yan ancak kart orada da daralmıyorsa ve başka
+        // çevirilerin üstüne daha az biniyorsa seçilir: kart ekranın kenarına sıkışıp daralmaz (X, beta-106). Mac ile aynı.
         var candidates = new[] { Side(roomLeft < roomRight), Side(roomLeft >= roomRight) }
             .Where(box => box is not null).Select(box => box!.Value).ToList();
         if (candidates.Count == 0)
@@ -332,7 +337,8 @@ public static class ScreenPhoneCard
         }
         var best = candidates[0];
         foreach (var candidate in candidates.Skip(1))
-            if (Covered(candidate, others) < Covered(best, others) - 1e-9) best = candidate;
+            if (candidate.Right - candidate.Left >= best.Right - best.Left - 1e-9 &&
+                Covered(candidate, others) < Covered(best, others) - 1e-9) best = candidate;
         return best;
     }
 
@@ -361,11 +367,31 @@ public static class ScreenPhoneCard
         var onPhone = items.Where(item => item.Phone?.Role.InCard() == true).OrderBy(item => item.Phone!.Spot.Top).ToList();
         if (!onPhone.Any(item => !item.Unchanged)) return items;
         var others = items.Where(item => item.Phone?.Role.InCard() != true).ToList();
-        var card = CardBox(handset.Bounds, [.. others.Where(item => !item.Unchanged).Select(item => item.Box)]);
-        var cardWidth = card.Right - card.Left;
+        var start = CardBox(handset.Bounds, [.. others.Where(item => !item.Unchanged).Select(item => item.Box)]);
         var measured = lockedLine ?? MeasuredLine(onPhone) ?? 0;
         var scale = Math.Min(MaxScale, Math.Max(MinScale, textScale));
         var line = Math.Min(MaxLine * scale, Math.Max(MinLine * scale, measured));
+        // Sohbet dışı ekran (mesaj listesi, ana ekran, uygulama kartları) panele sığmazsa satırları düşmez: yazı
+        // FitMinLine'a dek küçülür. Sohbette yazı boyu sabit kalır, en eski mesajlar düşer (Mac ile aynı).
+        var chat = onPhone.Any(item => item.Phone!.Role is Role.Incoming or Role.Outgoing or Role.Message or Role.Option);
+        var least = FitMinLine * scale;
+        while (true)
+        {
+            var (made, dropped) = Arrange(items, onPhone, others, start, handset, line);
+            if (!dropped || chat || line <= least + 1e-12) return made;
+            line = Math.Max(least, line * 0.9);
+        }
+    }
+
+    /// <summary>Sohbet dışı ekranın panele sığmadığında yazısının küçülebileceği en küçük satır (eski alt sınır). Mac ile aynı.</summary>
+    internal const double FitMinLine = 0.022;
+
+    /// <summary><see cref="Layout"/>'un verilen satır yüksekliğiyle dizilişi; Dropped: panele sığmayan en eski satırlar düştü.</summary>
+    private static (IReadOnlyList<ScreenTranslation.Item> Items, bool Dropped) Arrange(IReadOnlyList<ScreenTranslation.Item> items,
+        List<ScreenTranslation.Item> onPhone, List<ScreenTranslation.Item> others, TextBox start, Handset handset, double line)
+    {
+        var card = start;
+        var cardWidth = card.Right - card.Left;
         double pad = cardWidth * 0.05, padY = line * 0.4, spacing = line * BubbleSpacing;
         static TextLook Flat(string align, bool bold) => new(bold, false, align, false, true);
 
@@ -442,7 +468,7 @@ public static class ScreenPhoneCard
             };
             rows.Add(new Row(placed, width, lines.Count * line * LineSpacing + line * BubblePadding, side));
         }
-        if (rows.Count == 0) return items;
+        if (rows.Count == 0) return (items, false);
         var limit = 1 - ScreenMargin;
         const double bodyTop = ScreenMargin;
         // Her balon kendi İngilizce balonunun yüksekliğinde; çakışan balon üsttekinin altına en az kaydırmayla itilir. Panel
@@ -464,9 +490,11 @@ public static class ScreenPhoneCard
             return tops;
         }
         var tops = AlignedTops();
+        var dropped = false;
         while (rows.Count > 1 && tops[0] < bodyTop - 1e-9)
         {
             rows.RemoveAt(0);
+            dropped = true;
             tops = AlignedTops();
         }
         if (tops.Length > 0 && tops[0] < bodyTop) tops[0] = bodyTop;
@@ -501,7 +529,7 @@ public static class ScreenPhoneCard
                 : row.Side == "center" ? (card.Left + card.Right - row.Width) / 2 : card.Left + pad;
             result.Add(row.Item with { Box = new TextBox(left, tops[i], left + row.Width, tops[i] + row.Height) });
         }
-        return result;
+        return (result, dropped);
     }
 
     /// <summary>Sohbet dışı ekranın kartı mı (ana ekranın yazısı da).</summary>

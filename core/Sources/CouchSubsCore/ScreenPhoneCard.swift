@@ -91,8 +91,9 @@ public enum ScreenPhoneCard {
     /// telefonun üstüne) konur.
     static let minWidth = 0.12, minBelow = 0.18
     /// Kartın istenen eni: telefonun bu katı, en az `cardMin` (yanda yer varsa). Telefon boyundaki dar kartta Türkçe
-    /// mesajlar çok satıra bölünüyor, balonlar iç içe görünüyordu.
-    static let cardScale = 1.4, cardMin = 0.22
+    /// mesajlar çok satıra bölünüyor, balonlar iç içe görünüyordu. Yazı altyazı boyuna büyüyünce (`minLine`) kart da
+    /// genişledi (1080p'de ~650 piksel): balonda satır başına ~22 harf düşer, her satıra bir sözcük düşmez.
+    static let cardScale = 1.7, cardMin = 0.34
     /// Mesajlar telefon boyuna sığmazsa kart ekranın bu payına kadar yukarı ve aşağı uzar; yine sığmazsa eski mesajlar düşer.
     static let screenMargin = 0.03
     /// Balonlar arası boşluk, balonun iç dolgusu (üst + alt toplamı) ve satır aralığı; satır yüksekliğine oranla. TV
@@ -103,12 +104,14 @@ public enum ScreenPhoneCard {
     static let listGap = 0.1
     /// Balonun kart genişliğine oranı (en çok) ve en az.
     static let bubbleShare = 0.8, bubbleMin = 0.3
-    /// Kartta yazı boyu (kare yüksekliğine oranla) en az bu: telefonun küçük yazısı TV'de okunsun (1080p'de ~24 nokta).
-    static let minLine = 0.022
-    /// Kartta yazı boyu en çok bu (altyazı boyutu çarpanıyla): telefon yazısıyla orantılı kalır. Sinan Bey (beta.100,
-    /// 3416): gönderinin Türkçesi dev, her satıra bir sözcük düşen patlak balondu; ölçüm fotoğrafın içindeki büyük yazıyı
-    /// (tabela) da alıyordu. 3417'deki küçük balon doğru boydur (1080p'de ~32 nokta satır).
-    static let maxLine = 0.03
+    /// Kartta yazı boyu (kare yüksekliğine oranla, altyazı boyutu çarpanıyla) en az bu: panelin yazısı altyazı boyunun
+    /// ~%85'i (varsayılan 46 piksellik altyazıda TV'de 1080p'de ~39, 4K'da ~78 piksel). X (@justwiever, beta-106, iki
+    /// kez): telefonun yanındaki çeviri "küçük, okunmuyor"du. Satır telefonun yazısından ölçülüyor, GTA 6'da telefon
+    /// ekranda küçük olduğundan hep alt sınırda (0,022: TV'de ~23 piksel, altyazının yarısı) kalıyordu.
+    static let minLine = 0.038
+    /// Kartta yazı boyu en çok bu (altyazı boyutu çarpanıyla): ölçüm fotoğrafın içindeki büyük yazıyı (tabela) alırsa
+    /// panel dev çizilmez (Sinan Bey, beta.100 3416: her satıra bir sözcük düşen patlak balon).
+    static let maxLine = 0.042
     /// Bir harfin ortalama genişliği, satır yüksekliğine oranla (TV'nin yazı tipinde Türkçe metinle ölçüldü, ~0,5).
     static let charWidth = 0.5
 
@@ -288,7 +291,9 @@ public enum ScreenPhoneCard {
             let left = right ? phone.right + gap : phone.left - gap - width
             return TextBox(left: left, top: phone.top, right: left + width, bottom: phone.bottom)
         }
-        // Önce daha geniş yan; öbür yan ancak başka çevirilerin üstüne daha az binerse seçilir.
+        // Önce daha geniş yan (telefon kenardaysa ekranın ortasına doğru); öbür yan ancak kart orada da daralmıyorsa ve başka
+        // çevirilerin üstüne daha az biniyorsa seçilir. Önceden dar yan da seçilebiliyordu: kart ekranın kenarına sıkışıp
+        // daralıyordu (X, beta-106: "yanda küçük panel").
         let candidates = [side(right: roomLeft < roomRight), side(right: roomLeft >= roomRight)].compactMap { $0 }
         guard var best = candidates.first else {
             if 1 - screenMargin - (phone.bottom + gap) >= minBelow {
@@ -298,7 +303,10 @@ public enum ScreenPhoneCard {
             }
             return TextBox(left: max(0, phone.left), top: phone.top, right: min(1, phone.right), bottom: phone.bottom)
         }
-        for candidate in candidates.dropFirst() where covered(candidate, others) < covered(best, others) - 1e-9 { best = candidate }
+        for candidate in candidates.dropFirst()
+        where candidate.right - candidate.left >= best.right - best.left - 1e-9 && covered(candidate, others) < covered(best, others) - 1e-9 {
+            best = candidate
+        }
         return best
     }
 
@@ -325,11 +333,32 @@ public enum ScreenPhoneCard {
         let onPhone = items.filter { $0.phone?.role.inCard == true }.sorted { $0.phone!.spot.top < $1.phone!.spot.top }
         guard onPhone.contains(where: { !$0.unchanged }) else { return items }
         let others = items.filter { $0.phone?.role.inCard != true }
-        var card = cardBox(handset.bounds, avoiding: others.filter { !$0.unchanged }.map(\.box))
-        let cardWidth = card.right - card.left
+        let card = cardBox(handset.bounds, avoiding: others.filter { !$0.unchanged }.map(\.box))
         let measured = locked ?? measuredLine(onPhone) ?? 0
         let scale = min(maxScale, max(minScale, textScale))
-        let line = min(maxLine * scale, max(minLine * scale, measured))
+        var line = min(maxLine * scale, max(minLine * scale, measured))
+        // Sohbet dışı ekran (mesaj listesi, ana ekran, uygulama kartları) panele sığmazsa satırları düşmez: yazı `fitMinLine`a
+        // dek küçülür. Sohbette yazı boyu sabit kalır, telefonun kendisi gibi en eski mesajlar düşer (yeni mesajla yazı boyu
+        // oynamaz). Windows ve Android aynı.
+        let chat = onPhone.contains { [.incoming, .outgoing, .message, .option].contains($0.phone!.role) }
+        let least = fitMinLine * scale
+        while true {
+            let made = arrange(items, onPhone: onPhone, others: others, card: card, handset: handset, line: line)
+            if !made.dropped || chat || line <= least + 1e-12 { return made.items }
+            line = max(least, line * 0.9)
+        }
+    }
+
+    /// Sohbet dışı ekranın panele sığmadığında yazısının küçülebileceği en küçük satır (kare yüksekliğine oranla, altyazı
+    /// boyutu çarpanıyla; eski alt sınır).
+    static let fitMinLine = 0.022
+
+    /// `layout`'un verilen satır yüksekliğiyle dizilişi; `dropped`: panele sığmayan en eski satırlar düştü.
+    private static func arrange(_ items: [ScreenTranslation.Item], onPhone: [ScreenTranslation.Item],
+                                others: [ScreenTranslation.Item], card start: TextBox, handset: Handset,
+                                line: Double) -> (items: [ScreenTranslation.Item], dropped: Bool) {
+        var card = start
+        let cardWidth = card.right - card.left
         let pad = cardWidth * 0.05, padY = line * 0.4, spacing = line * bubbleSpacing
         let flat = { (align: TextLook.Align, bold: Bool) in TextLook(bold: bold, condensed: false, align: align, upper: false, flat: true) }
 
@@ -403,7 +432,7 @@ public enum ScreenPhoneCard {
             placed.look = flat(side, kind == .heading)
             rows.append(Row(item: placed, width: width, height: Double(lines.count) * line * lineSpacing + line * bubblePadding, side: side))
         }
-        guard !rows.isEmpty else { return items }
+        guard !rows.isEmpty else { return (items, false) }
         let limit = 1 - screenMargin
         let bodyTop = screenMargin
         // Her balon kendi İngilizce balonunun yüksekliğinde; çakışan balon üsttekinin altına en az kaydırmayla itilir. Panel
@@ -423,8 +452,10 @@ public enum ScreenPhoneCard {
             return tops
         }
         var tops = alignedTops()
+        var dropped = false
         while rows.count > 1, let first = tops.first, first < bodyTop - 1e-9 {
             rows.removeFirst()
+            dropped = true
             tops = alignedTops()
         }
         if let first = tops.first, first < bodyTop { tops[0] = bodyTop }
@@ -457,7 +488,7 @@ public enum ScreenPhoneCard {
             placed.box = TextBox(left: left, top: tops[index], right: left + row.width, bottom: tops[index] + row.height)
             result.append(placed)
         }
-        return result
+        return (result, dropped)
     }
 
     /// Sohbet dışı ekranın kartı mı (ana ekranın yazısı da).

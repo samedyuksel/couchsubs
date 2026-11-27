@@ -27,10 +27,10 @@ public class PhoneListCardTests
     private static List<ScreenTranslation.Item> List() =>
     [
         OnPhone("Messages", "Mesajlar", ScreenPhoneCard.Role.Heading, 0.05, 0.05, 0.4),
-        OnPhone("Cal", "Cal", ScreenPhoneCard.Role.Contact, 0.15, 0.3, 0.4, unchanged: true),
-        OnPhone("$ in your mailbox. You bailed", "$ posta kutunda. Beni...", ScreenPhoneCard.Role.Preview, 0.19, 0.3, 0.95),
-        OnPhone("Brian", "Brian", ScreenPhoneCard.Role.Contact, 0.30, 0.3, 0.42, unchanged: true),
-        OnPhone("Ok. There's some cash in t...", "Tamam. Biraz para...", ScreenPhoneCard.Role.Preview, 0.34, 0.3, 0.95),
+        OnPhone("Cal", "Cal", ScreenPhoneCard.Role.Contact, 0.22, 0.3, 0.4, unchanged: true),
+        OnPhone("$ in your mailbox. You bailed", "$ posta kutunda. Beni...", ScreenPhoneCard.Role.Preview, 0.26, 0.3, 0.95),
+        OnPhone("Brian", "Brian", ScreenPhoneCard.Role.Contact, 0.48, 0.3, 0.42, unchanged: true),
+        OnPhone("Ok. There's some cash in t...", "Tamam. Biraz para...", ScreenPhoneCard.Role.Preview, 0.52, 0.3, 0.95),
     ];
 
     /// <summary>

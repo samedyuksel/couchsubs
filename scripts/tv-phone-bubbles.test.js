@@ -605,3 +605,43 @@ test('sohbet dışı ekran: avatarsız kartlar orantılı boyda, başlık satır
   for (let i = 0; i + 1 < r.cards.length; i++) assert.ok(r.cards[i].box.bottom <= r.cards[i + 1].box.top + 1, 'kartlar üst üste');
   shoot(appCardsScript, 'tv-phone-app-cards.png');
 });
+
+// X (@justwiever, beta-106, iki kez): telefonun yanındaki çeviri "küçük panel, okunmuyor". Bilgisayar artık panelin
+// satırını altyazı boyunun ~%85'inde gönderir (ScreenPhoneCard.minLine 0,038; kart en az ekranın 0,34'ü). TV o satırla
+// çizer: gerçek karedeki telefonun (gta6-telefon-sohbet-1; sağ el ve aynalanmış sol el, #1407) yanında yazı 1080p'de en
+// az ~39, 4K'da ~78 piksel; balonlar kartın ve ekranın içinde, kenara sıkışmaz.
+const readableBlocks = (left) => {
+  const at = (x0, x1) => [left + x0, 0, left + x1, 0];
+  const row = (kind, text, x0, x1, top, bottom, surface) => {
+    const b = at(x0, x1);
+    return Object.assign(part(kind, text, [b[0], top, b[2], bottom], surface), { line: 0.038 });
+  };
+  return [
+    Object.assign(part('card', ' ', [left, 0.195, left + 0.34, 0.861], cardStyle), { aligned: true, line: 0.038 }),
+    row('theirs', 'Neredesin adamım', 0.017, 0.2, 0.30, 0.37, cream),
+    row('mine', 'Yoldayım, beş dakikaya oradayım', 0.051, 0.323, 0.40, 0.52, blue),
+    row('theirs', 'Sağ ol dostum! Başka bir şey bulursan bana getir', 0.017, 0.289, 0.55, 0.67, cream)];
+};
+const readableScript = (left) => `
+  showRegion({ id: 'game-phone', text: 'x', box: { left: 0.2, top: 0.195, right: 0.8, bottom: 0.861 }, blocks: ${JSON.stringify(readableBlocks(left))} });
+  var panel = document.querySelector('.phone-panel');
+  var bubbles = Array.prototype.map.call(panel.querySelectorAll('.panel-bubble'), function (bubble) {
+    return { box: rect(bubble), font: parseFloat(getComputedStyle(bubble).fontSize) };
+  });
+  $('result').textContent = JSON.stringify({ bubbles: bubbles, panel: rect(panel), w: window.innerWidth, h: window.innerHeight });`;
+
+test('telefon çevirisi okunur boyda: altyazının ~%85\'i, 1080p ve 4K, sağ ve sol el', { skip: !browser && 'Chromium/Chrome bulunamadı' }, () => {
+  for (const size of ['1920,1080', '3840,2160']) {
+    for (const left of [0.257, 0.401]) {
+      const r = measure(readableScript(left), null, { size, dpr: 1 });
+      const tag = size + ' ' + left;
+      assert.equal(r.bubbles.length, 3, tag);
+      for (const b of r.bubbles) {
+        assert.ok(b.font >= 46 * 0.85 * r.h / 1080 - 1, 'yazı küçük: ' + b.font + ' ' + tag);
+        assert.ok(b.box.left >= r.panel.left - 1 && b.box.right <= r.panel.right + 1, 'balon kartın dışında: ' + tag);
+        assert.ok(b.box.left >= 0 && b.box.right <= r.w, 'balon ekranın dışında: ' + tag);
+      }
+      assert.ok(r.panel.right - r.panel.left >= 0.34 * r.w - 2, 'kart dar: ' + tag);
+    }
+  }
+});
